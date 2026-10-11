@@ -1,0 +1,202 @@
+services:
+  tts-piper:
+    build: ./images/tts-piper
+    ports:
+      - 10200:10200
+    environment:
+      WYOMING_PIPER_ARGS: >-
+        --voice ja_JP-hi_fi_captain-medium --debug
+    volumes:
+      - piper_data:/data
+  tts-voicevox:
+    build: ./images/tts-voicevox
+    ports:
+      - 10201:10200
+    environment:
+      TZ: Asia/Tokyo
+    command:
+      - --voicevox-url
+      - "${VOICEVOX_URL}"
+      - --default-speaker
+      - "3"
+  tts-gemini:
+    build: ./images/tts-gemini
+    ports:
+      - "10202:10200"
+    environment:
+      TZ: Asia/Tokyo
+    command:
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "10200"
+      - --language
+      - "ja-JP"
+      - --api-key
+      - "$GOOGLE_API_KEY"
+  stt-whisper:
+    image: rhasspy/wyoming-whisper:3.8.0
+    ports:
+      - 10300:10300
+    environment:
+      TZ: Asia/Tokyo
+      WYO_WHISPER_MODEL: tiny
+      WYO_WHISPER_LANGUAGE: ja
+      WYO_WHISPER_DEBUG: false
+    volumes:
+      - whisper_data:/data
+  stt-openai:
+    build: ./images/stt-openai
+    ports:
+      - "10301:10300"
+    environment:
+      TZ: Asia/Tokyo
+      PYTHONUNBUFFERED: "1"
+    command:
+      - --api-key
+      - "${OPENAI_API_KEY}"
+      - --language
+      - "ja"
+  stt-gemini:
+    build: ./images/stt-gemini
+    ports:
+      - "10302:10300"
+    environment:
+      TZ: Asia/Tokyo
+    command:
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "10300"
+      - --language
+      - "ja-JP"
+      - --model
+      - "gemini-3.5-transcribe-live"
+      - --api-key
+      - "$GOOGLE_API_KEY"
+  wwd-openwakeword:
+    image: rhasspy/wyoming-openwakeword:2.1.0
+    ports:
+      - 10400:10400
+    command:
+      - --preload-model
+      - okay_nabu
+      - --debug
+  wwd-tinykw:
+    build: ./images/wwd-tinykw
+    ports:
+      - 10401:10400
+  llm-ollama:
+    build: ./images/llm-ollama
+    ports:
+      - 10500:10500
+    command:
+      - --ollama-url
+      - "${OLLAMA_URL}"
+      - --model
+      - "qwen2.5:3b"
+      - --system-prompt
+      - "あなたは優秀な音声アシスタントです。日本語で回答します。回答は1〜3文程度にまとめます。"
+  llm-chatgpt:
+    build: ./images/llm-chatgpt
+    ports:
+      - "10501:10500"
+    environment:
+      TZ: Asia/Tokyo
+    command:
+      - --api-key
+      - "$OPENAI_API_KEY"
+      - --model
+      - "gpt-4o-mini"
+      - --system-prompt
+      - "あなたは音声アシスタントです。質問に対して1〜3文程度で短く簡潔に日本語で答えてください。"
+  llm-gemini:
+    build: ./images/llm-gemini
+    ports:
+      - "10502:10500"
+    environment:
+      TZ: Asia/Tokyo
+    command:
+      - --api-key
+      - "$GOOGLE_API_KEY"
+      - --model
+      - "gemini-3.5-flash-lite"
+      - --system-prompt
+      - "あなたは親切な音声アシスタントです。短く簡潔に回答してください。"
+  ws-bridge-tts-piper:
+    profiles: ["websocket"]
+    depends_on:
+      - tts-piper
+    build: ./images/ws-bridge
+    ports:
+      - "11200:8000"
+    environment:
+      TCP_HOST: "tts-piper"
+      TCP_PORT: "10200"
+  ws-bridge-tts-voicevox:
+    profiles: ["websocket"]
+    depends_on:
+      - tts-voicevox
+    build: ./images/ws-bridge
+    ports:
+      - "11201:8000"
+    environment:
+      TCP_HOST: "tts-voicevox"
+      TCP_PORT: "10200"
+  ws-bridge-tts-gemini:
+    profiles: ["websocket"]
+    depends_on:
+      - tts-gemini
+    build: ./images/ws-bridge
+    ports:
+      - "11302:8000"
+    environment:
+      TCP_HOST: "tts-gemini"
+      TCP_PORT: "10320"
+    command:
+      - --host
+      - "0.0.0.0"
+  ws-bridge-stt-whisper:
+    profiles: ["websocket"]
+    depends_on:
+      - stt-whisper
+    build: ./images/ws-bridge
+    ports:
+      - "11300:8000"
+    environment:
+      TCP_HOST: "stt-whisper"
+      TCP_PORT: "10300"
+    command:
+      - --host
+      - "0.0.0.0"
+      - --ssl-keyfile=./key.pem
+      - --ssl-certfile=./cert.pem
+  ws-bridge-stt-openai:
+    profiles: ["websocket"]
+    depends_on:
+      - stt-openai
+    build: ./images/ws-bridge
+    ports:
+      - "11301:8000"
+    environment:
+      TCP_HOST: "stt-openai"
+      TCP_PORT: "10300"
+    command:
+      - --host
+      - "0.0.0.0"
+      - --ssl-keyfile=./key.pem
+      - --ssl-certfile=./cert.pem
+  ws-bridge-llm-ollama:
+    profiles: ["websocket"]
+    depends_on:
+      - llm-ollama
+    build: ./images/ws-bridge
+    ports:
+      - "11500:8000"
+    environment:
+      TCP_HOST: "llm-ollama"
+      TCP_PORT: "10500"
+
+volumes:
+  whisper_data:
+  piper_data:

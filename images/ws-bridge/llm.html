@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Wyoming LLM</title>
+    </head>
+    <body>
+        <h1>Wyoming LLM</h1>
+
+        <h2>Connection</h2>
+        <form>
+            <label for="hostname">Hostname</label>
+            <input type="text" id="hostname" />
+            <label for="port">Port</label>
+            <input type="number" id="port" />
+            <br/>
+            <button type="button" id="btn-connect"    onclick="connect(event)"   >Connect</button>
+            <button type="button" id="btn-disconnect" onclick="disconnect(event)">Disconnect</button>
+        </form>
+
+        <h2>Conversation</h2>
+        <form action="" onsubmit="sendMessage(event)">
+            <input type="text" id="messageText" autocomplete="off"/>
+            <button id="btn-send">Send</button>
+        </form>
+
+        <ul id='messages'>
+        </ul>
+
+        <script>
+            document.querySelector("#hostname").value = window.location.hostname;
+            document.querySelector("#port").value = window.location.port;
+
+            let ws = null
+            let rxBuffer = "";
+            let dataLength = 0;
+
+            const encoder = new TextEncoder();
+            const decoder = new TextDecoder("utf-8");
+
+            updateUI()
+
+            function updateUI() {
+                const connBtn = document.querySelector("#btn-connect");
+                const discBtn = document.querySelector("#btn-disconnect");
+                const sendBtn = document.querySelector("#btn-send");
+
+                const isConnected = ws!= null
+                connBtn.disabled = isConnected;
+                discBtn.disabled = !isConnected;
+                sendBtn.disabled = !isConnected;
+            }
+
+            function connect(event) {
+                const hostname  = document.querySelector("#hostname").value
+                const port      = document.querySelector("#port").value 
+                const url = `ws://${hostname}:${port}/ws`
+                console.log(`url=${url}`)
+
+                ws = new WebSocket(url)               
+                ws.binaryType = "blob";
+                
+                ws.onopen = function() {
+                    console.log("Connected.");
+                    updateUI();
+                };
+
+                ws.onmessage = recvMessage;
+
+                ws.onclose = function() {
+                    console.log("Disconnected.");
+                    ws = null;
+                    rxBuffer = "";
+                    dataLength = 0;
+                    updateUI();
+                };
+
+                ws.onerror = function(err) {
+                    console.error("WebSocket error:", err);
+                };
+            }
+            
+            function disconnect(event) {
+                if (ws) ws.close();
+            }
+
+            function sendMessage(event) {
+                event.preventDefault()
+                
+                const input = document.getElementById("messageText")
+                const text = input.value
+                const header = JSON.stringify({type: "transcript", data: { text: text }}); 
+                ws.send(header + '\n')
+                input.value = ""
+                appendMessage("Q: " + text)
+                
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            }
+
+            async function recvMessage(event) {
+                rxBuffer += await event.data.text();
+
+                if (rxBuffer.includes("\n")) {
+                    const newlineIdx = rxBuffer.indexOf("\n");
+                    const header = JSON.parse(rxBuffer.substring(0, newlineIdx).trim());
+                    console.log(header);
+                    rxBuffer = rxBuffer.substring(newlineIdx + 1);
+
+                    dataLength = header.data_length;
+                }
+
+                if (dataLength > 0 && encoder.encode(rxBuffer).length >= dataLength) {
+                    const [targetBuffer, remainingBuffer] = splitBuffer(rxBuffer, dataLength)
+                    const data = JSON.parse(targetBuffer.trim());
+                    console.log(data);
+                    appendMessage("A: " + data.text)
+                    rxBuffer = remainingBuffer;
+                    dataLength = 0;
+                }
+            }
+
+            function splitBuffer(stringBuffer, byte_length) {
+                const bytes = encoder.encode(stringBuffer);
+                const targetBytes = bytes.subarray(0, byte_length);
+                const remainingBytes = bytes.subarray(byte_length);
+                return [decoder.decode(targetBytes), decoder.decode(remainingBytes)];
+            }
+
+            function appendMessage(text) {
+                var messages = document.getElementById('messages')
+                var message = document.createElement('li')
+                var content = document.createTextNode(text)
+                message.appendChild(content)
+                messages.appendChild(message)
+            }
+        </script>
+    </body>
+</html>

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Wyoming TTS</title>
+    </head>
+    <body>
+        <h1>Wyoming TTS</h1>
+
+        <h2>Connection</h2>
+        <form>
+            <label for="hostname">Hostname</label>
+            <input type="text" id="hostname" />
+            <label for="port">Port</label>
+            <input type="number" id="port" />
+            <br/>
+            <button type="button" id="btn-connect"    onclick="connect(event)"   >Connect</button>
+            <button type="button" id="btn-disconnect" onclick="disconnect(event)">Disconnect</button>
+        </form>
+
+        <h2>TTS</h2>
+        <form action="" onsubmit="sendMessage(event)">
+            <input type="text" id="messageText" autocomplete="off"/>
+            <button id="btn-send">Send</button>
+        </form>
+        <ul id='messages'>
+        </ul>
+
+        <script>
+            document.querySelector("#hostname").value = window.location.hostname;
+            document.querySelector("#port").value = window.location.port;
+
+            let ws = null;
+
+            updateUI();
+
+            function updateUI() {
+                const connBtn = document.querySelector("#btn-connect");
+                const discBtn = document.querySelector("#btn-disconnect");
+                const sendBtn = document.querySelector("#btn-send");
+
+                const isConnected = ws!= null
+                connBtn.disabled = isConnected;
+                discBtn.disabled = !isConnected;
+                sendBtn.disabled = !isConnected;
+            }
+
+            function connect(event) {
+                const hostname  = document.querySelector("#hostname").value
+                const port      = document.querySelector("#port").value 
+                const url = `ws://${hostname}:${port}/ws`
+                console.log(`url=${url}`)
+
+                ws = new WebSocket(url)               
+                ws.binaryType = "arraybuffer";
+                
+                ws.onopen = function() {
+                    console.log("Connected.");
+                    updateUI();
+                };
+
+                ws.onmessage = recvMessage;
+
+                ws.onclose = function() {
+                    console.log("Disconnected.");
+                    ws = null;
+                    updateUI();
+                };
+
+                ws.onerror = function(err) {
+                    console.error("WebSocket error:", err);
+                };
+            }
+
+            function disconnect(event) {
+                if (ws) ws.close();
+            }
+
+            const encoder = new TextEncoder();
+
+            function sendMessage(event) {
+                const input = document.getElementById("messageText")
+                const text = input.value
+                const header = JSON.stringify({
+                    type: "synthesize",
+                    data: { text: text }
+                }); 
+                ws.send(encoder.encode(header + '\n'))
+                console.log("send: header: " + header)
+                input.value = ""
+                appendMessage("Q: " + text)
+                event.preventDefault()
+            }
+
+            const decoder = new TextDecoder("utf-8");
+            let header;
+            let data;
+            let payload;
+            let buffer;
+            let rate = 16000;
+
+            function recvMessage(event) {
+                console.log("recv : event: data bytes =" + event.data.byteLength);
+                let rxBuffer = new Uint8Array(event.data);
+                if (buffer) {
+                    const newBuffer = new Uint8Array(buffer.length + rxBuffer.length);
+                    newBuffer.set(buffer, 0);
+                    newBuffer.set(rxBuffer, buffer.length);
+                    buffer = newBuffer;
+                } else {
+                    buffer = rxBuffer;
+                }
+
+                while (true) {
+                    if (!header) {
+                        const newlineIndex = buffer.indexOf(10);
+                        if (newlineIndex <= 0) {
+                            console.log("    newlineIndex = " + newlineIndex)
+                            return;
+                        }
+                        const headerBytes = buffer.subarray(0, newlineIndex);
+                        const headerStr = decoder.decode(headerBytes).trim();
+                        console.log("    header: " + headerStr);
+                        header = JSON.parse(headerStr);
+                        buffer = buffer.slice(newlineIndex + 1);          
+                    }
+
+                    if (header.data_length && !data) {
+                        if (buffer.length < header.data_length) return;
+                        const dataBytes = buffer.subarray(0, header.data_length)
+                        const dataStr = decoder.decode(dataBytes).trim();
+                        console.log("    data: " + dataStr);
+                        data = JSON.parse(dataStr);
+                        buffer = buffer.slice(header.data_length);   
+                    }
+
+                    if (header.payload_length && !payload) {
+                        if (buffer.length < header.payload_length) return;
+                        payload = buffer.slice(0, header.payload_length)
+                        console.log("recv: payload: length: " + payload.length);
+                        buffer = buffer.slice(header.payload_length);
+                    }
+
+                    console.log("    "  + header.type + " received all");
+                    if (header.type == 'audio-start') {
+                        rate = data.rate;
+                    } else if (header.type == 'audio-chunk') {
+                        console.log("    playChunk: rate=" + rate);
+                        playChunk(toAudioBuffer(payload, rate));
+                    }
+
+                    header = null;
+                    data = null;
+                    payload = null;
+                    console.log("    remaining buffer length=" + buffer.length);
+                }
+            }
+
+            const audioCtx = new window.AudioContext();
+
+            function toAudioBuffer(uint8Arr, rate) {
+                const int16Array = new Int16Array(uint8Arr.buffer, uint8Arr.byteOffset, uint8Arr.byteLength / 2);
+                const audioBuffer = audioCtx.createBuffer(1, int16Array.length, rate);
+                const nowBuffering = audioBuffer.getChannelData(0);
+                for (let i = 0; i < int16Array.length; i++) {
+                    nowBuffering[i] = int16Array[i] / 32768;
+                }
+                return audioBuffer;
+            }
+
+            let nextStartTime = 0;
+
+            function playChunk(audioBuffer) {
+                const source = audioCtx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioCtx.destination);
+
+                const currentTime = audioCtx.currentTime;
+                if (nextStartTime < currentTime) {
+                    nextStartTime = currentTime;
+                }
+                source.start(nextStartTime);
+                nextStartTime += audioBuffer.duration;
+            }
+
+            function appendMessage(text) {
+                var messages = document.getElementById('messages')
+                var message = document.createElement('li')
+                var content = document.createTextNode(text)
+                message.appendChild(content)
+                messages.appendChild(message)
+            }
+
+            function appendMessageDelta(delta) {
+                var messages = document.getElementById('messages')
+                var message = messages.lastElementChild
+                message.textContent += delta
+            }
+
+        </script>
+    </body>
+</html>
+
+
+
+

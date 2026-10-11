@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Wyoming STT</title>
+    </head>
+    <body>
+        <h1>Wyoming STT</h1>
+
+        <h2>Connection</h2>
+        <form>
+            <label for="hostname">Hostname</label>
+            <input type="text" id="hostname" />
+            <label for="port">Port</label>
+            <input type="number" id="port" />
+            <br/>
+            <button type="button" id="btn-connect"    onclick="connect(event)"   >Connect</button>
+            <button type="button" id="btn-disconnect" onclick="disconnect(event)">Disconnect</button>
+        </form>
+
+        <h2>Speech</h2>
+        <div class="controls">
+            <button id="btn-record-start" onclick="startRecording()" disabled>Recod</button>
+            <button id="btn-record-stop" onclick="stopRecording()" disabled>Stop</button>
+        </div>
+
+        <h2>Result</h2>
+        <ul id='transcript'>
+        </ul>
+
+        <script>
+            const RATE = 24000;
+            const CHUNK = 1024;
+            
+            document.querySelector("#hostname").value = window.location.hostname;
+            document.querySelector("#port").value = window.location.port;
+
+            let ws = null;
+            let audioCtx;
+            let mediaStream = null;
+            let scriptProcessor = null;
+    
+            let rxBuffer = new Uint8Array(0);
+            let currentHeader = null;
+            
+            const decoder = new TextDecoder("utf-8");
+            const encoder = new TextEncoder();
+
+            updateUI()
+
+            function updateUI() {
+                const isConnected = ws !== null && ws.readyState === WebSocket.OPEN;
+                const isRecording = scriptProcessor !== null;
+
+                document.querySelector("#btn-connect").disabled = isConnected;
+                document.querySelector("#btn-disconnect").disabled = !isConnected;
+                document.querySelector("#btn-record-start").disabled = !isConnected || isRecording;
+                document.querySelector("#btn-record-stop").disabled = !isConnected || !isRecording;
+            }
+
+            function connect() {
+                const protocol = window.location.protocol == 'https:' ? 'wss' : 'ws';
+                const hostname  = document.querySelector("#hostname").value
+                const port      = document.querySelector("#port").value 
+                const url = `${protocol}://${hostname}:${port}/ws`
+                console.log(`url=${url}`)
+
+                ws = new WebSocket(url);
+                ws.binaryType = "arraybuffer";
+
+                ws.onopen = () => {
+                    console.log("Connected.");
+                    updateUI();
+                };
+
+                ws.onmessage = recvMessage;
+
+                ws.onclose = () => {
+                    console.log("WebSocket Disconnected.");
+                    ws = null;
+                    if (scriptProcessor) stopRecording();
+                    updateUI();
+                };
+
+                ws.onerror = (err) => {
+                    console.error("Connection error: ", err);
+                };
+            }
+
+            function disconnect() {
+                if (ws) ws.close();
+            }
+
+            async function startRecording() {
+                transcribe();
+                audioStart();
+
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({sampleRate: RATE});
+                const source = audioContext.createMediaStreamSource(mediaStream);
+
+                scriptProcessor = audioContext.createScriptProcessor(CHUNK, 1, 1);
+
+                scriptProcessor.onaudioprocess = (event) => {
+                    const float32Array = event.inputBuffer.getChannelData(0); // Float32Array (-1 to 1)
+                    const pcm16Array = toInt16Array(float32Array);
+                    const payload = toArrayBuffer(pcm16Array);
+
+                    if (ws.readyState === WebSocket.OPEN) {
+                        audioChunk(payload);   
+                    }
+                };
+
+                source.connect(scriptProcessor);
+                scriptProcessor.connect(audioContext.destination);
+
+                updateUI();
+            }
+
+            function stopRecording() {
+                audioStop();
+
+                if (scriptProcessor) {
+                    scriptProcessor.disconnect();
+                    scriptProcessor = null;
+                }
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    mediaStream = null;
+                }
+                if (audioContext) {
+                    audioContext.close();
+                    audioContext = null;
+                }
+
+                updateUI();
+            }
+
+            function transcribe() {
+                const data = JSON.stringify({name: 'faster-whisper', language: 'ja'});
+                const header = JSON.stringify({type: "transcribe", data_length: data.length});
+                ws.send(encoder.encode(header + '\n'));
+                console.log("send: header: " + header);
+                ws.send(encoder.encode(data));
+                console.log("send: data: " + data);
+            }
+
+            function audioStart() {
+                const data = JSON.stringify({rate: RATE, width: 2, channels: 1});
+                const header = JSON.stringify({type: "audio-start", data_length: data.length});
+                ws.send(encoder.encode(header + '\n'));
+                console.log("send: header: " + header);
+                ws.send(encoder.encode(data));
+                console.log("send: data: " + data);
+            }
+
+            function audioChunk(payload) {
+                const data = JSON.stringify({rate: RATE, width: 1, channels: 1});
+                const header = JSON.stringify({type: "audio-chunk", data_length: data.length, payload_length: payload.byteLength});
+                ws.send(encoder.encode(header + '\n'))
+                console.log("send: header: " + header);
+                ws.send(encoder.encode(data))
+                console.log("send: data: " + data);
+                ws.send(payload);
+                console.log("send: payload: length=" + payload.byteLength);
+            }
+
+            function audioStop() {
+                const header = JSON.stringify({type: "audio-stop"});
+                ws.send(encoder.encode(header + '\n'))
+                console.log("send: header: " + header);
+            }
+
+            function toInt16Array(float32Array) {
+                const int16Array = new Int16Array(float32Array.length);
+                for (let i = 0; i < float32Array.length; i++) {
+                    const s = Math.max(-1, Math.min(1, float32Array[i]));
+                    int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                }
+                return int16Array;
+            }
+
+            function toArrayBuffer(pcm16Array) {
+                const arrayBuffer = new ArrayBuffer(2 * pcm16Array.length);
+                const dataView = new DataView(arrayBuffer);
+                for (let i = 0; i < pcm16Array.length; i++) {
+                    dataView.setInt16(2* i, pcm16Array[i], false); // false = Big Endian
+                }
+                return arrayBuffer;
+            }
+
+            let buffer = new Uint8Array();
+            let header = null;
+
+            async function recvMessage(event) {
+                const rxBuffer = new Uint8Array(event.data);
+                console.log("recv: data: length=" + rxBuffer.length);
+                {
+                    const newBuffer = new Uint8Array(buffer.length + rxBuffer.length);
+                    newBuffer.set(buffer, 0); 
+                    newBuffer.set(rxBuffer, buffer.length);
+                    buffer = newBuffer;
+                }
+
+                if (header == null) {
+                    const newlineIndex = buffer.indexOf(10);
+                    if (newlineIndex <= 0) {
+                        console.log("just push data to buffer");
+                        return;
+                    }
+
+                    const headerBytes = buffer.subarray(0, newlineIndex);
+                    const headerStr = decoder.decode(headerBytes).trim();
+                    console.log("recv: header: " + headerStr); 
+                    header = JSON.parse(headerStr);
+
+                    buffer = buffer.slice(newlineIndex + 1);
+                }
+
+                if (header != null && buffer.length >= header.data_length) {
+                    const dataBytes = buffer.subarray(0, header.data_length)
+                    const dataStr = decoder.decode(dataBytes).trim();
+                    console.log("recv: data: " + dataStr);
+                    const data = JSON.parse(dataStr);
+                    appendMessage(data.text);
+                    
+                    buffer = buffer.slice(header.data_length + 1);
+                    header = null;
+                }
+            }
+
+            function appendMessage(text) {
+                var messages = document.getElementById('transcript')
+                var message = document.createElement('li')
+                var content = document.createTextNode(text)
+                message.appendChild(content)
+                messages.appendChild(message)
+            }
+        </script>
+    </body>
+</html>
