@@ -33,7 +33,7 @@ services:
       - --language
       - "ja-JP"
       - --api-key
-      - "$GOOGLE_API_KEY"
+      - "$GEMINI_API_KEY"
   stt-whisper:
     image: rhasspy/wyoming-whisper:3.8.0
     ports:
@@ -73,7 +73,7 @@ services:
       - --model
       - "gemini-3.5-transcribe-live"
       - --api-key
-      - "$GOOGLE_API_KEY"
+      - "$GEMINI_API_KEY"
   wwd-openwakeword:
     image: rhasspy/wyoming-openwakeword:2.1.0
     ports:
@@ -118,7 +118,7 @@ services:
       TZ: Asia/Tokyo
     command:
       - --api-key
-      - "$GOOGLE_API_KEY"
+      - "$GEMINI_API_KEY"
       - --model
       - "gemini-3.5-flash-lite"
       - --system-prompt

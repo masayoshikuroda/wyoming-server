@@ -89,13 +89,13 @@ WebSocket ブリッジを有効にすると以下のポートが使えます。
 VOICEVOX_URL=http://localhost:50021
 OLLAMA_URL=http://localhost:11434/api/chat
 OPENAI_API_KEY=XXXXXX
-GOOGLE_API_KEY=XXXXXX
+GEMINI_API_KEY=XXXXXX
 ```
 
 - `VOICEVOX_URL` : VOICEVOX Engine の URL
 - `OLLAMA_URL` : Ollama の chat API URL
 - `OPENAI_API_KEY` : OpenAI API キー
-- `GOOGLE_API_KEY` : Gemini API キー
+- `GEMINI_API_KEY` : Gemini API キー
 
 ## 起動方法
 

@@ -186,7 +186,7 @@ async def main() -> None:
     parser.add_argument("--port", type=int, default=10300)
     parser.add_argument("--model", type=str, default="gemini-3.5-transcribe-live")
     parser.add_argument("--language", type=str, default="ja-JP")
-    parser.add_argument("--api-key", type=str, default=os.environ.get("GOOGLE_API_KEY", ""))
+    parser.add_argument("--api-key", type=str, default=os.environ.get("GEMINI_API_KEY", ""))
     args = parser.parse_args()
 
     wyoming_info = Info(

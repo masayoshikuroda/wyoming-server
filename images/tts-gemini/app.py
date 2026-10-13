@@ -137,7 +137,7 @@ async def main() -> None:
     parser.add_argument("--voice", type=str, default="Kore")
     parser.add_argument("--language", type=str, default="ja-JP")
     parser.add_argument("--sample-rate", type=int, default=16000)
-    parser.add_argument("--api-key", type=str, default=os.environ.get("GOOGLE_API_KEY", ""))
+    parser.add_argument("--api-key", type=str, default=os.environ.get("GEMINI_API_KEY", ""))
     args = parser.parse_args()
 
     wyoming_info = Info(
