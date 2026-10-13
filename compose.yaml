@@ -196,6 +196,26 @@ services:
     environment:
       TCP_HOST: "llm-ollama"
       TCP_PORT: "10500"
+  ws-bridge-llm-chatgpt:
+    profiles: ["websocket"]
+    depends_on:
+      - llm-chatgpt
+    build: ./images/ws-bridge
+    ports:
+      - "11501:8000"
+    environment:
+      TCP_HOST: "llm-chatgpt"
+      TCP_PORT: "10500"
+  ws-bridge-llm-gemini:
+    profiles: ["websocket"]
+    depends_on:
+      - llm-gemini
+    build: ./images/ws-bridge
+    ports:
+      - "11502:8000"
+    environment:
+      TCP_HOST: "llm-gemini"
+      TCP_PORT: "10500"
 
 volumes:
   whisper_data:
