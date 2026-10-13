@@ -78,6 +78,8 @@ WebSocket ブリッジを有効にすると以下のポートが使えます。
 - `ws-bridge-stt-whisper` : 11300
 - `ws-bridge-stt-openai` : 11301
 - `ws-bridge-llm-ollama` : 11500
+- `ws-bridge-llm-chatgpt` : 11501
+- `ws-bridge-llm-gemini` : 11502
 
 ## 必要な設定
 
@@ -134,5 +136,6 @@ WebSocket ブリッジを使うと、ブラウザから `/tts` / `/stt` / `/llm`
 http://localhost:11200/tts
 http://localhost:11300/stt
 http://localhost:11500/llm
+http://localhost:11501/llm
+http://localhost:11502/llm
 ```
-
