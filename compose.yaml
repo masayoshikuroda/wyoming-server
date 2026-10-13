@@ -123,11 +123,14 @@ services:
       - "gemini-3.5-flash-lite"
       - --system-prompt
       - "あなたは親切な音声アシスタントです。短く簡潔に回答してください。"
+  ws-bridge:
+    profiles: ["build-only"]
+    build: ./images/ws-bridge
   ws-bridge-tts-piper:
     profiles: ["websocket"]
     depends_on:
       - tts-piper
-    build: ./images/ws-bridge
+    image: ${COMPOSE_PROJECT_NAME}-ws-bridge:latest
     ports:
       - "11200:8000"
     environment:
@@ -137,7 +140,7 @@ services:
     profiles: ["websocket"]
     depends_on:
       - tts-voicevox
-    build: ./images/ws-bridge
+    image: ${COMPOSE_PROJECT_NAME}-ws-bridge:latest
     ports:
       - "11201:8000"
     environment:
@@ -147,7 +150,7 @@ services:
     profiles: ["websocket"]
     depends_on:
       - tts-gemini
-    build: ./images/ws-bridge
+    image: ${COMPOSE_PROJECT_NAME}-ws-bridge:latest
     ports:
       - "11302:8000"
     environment:
@@ -160,7 +163,7 @@ services:
     profiles: ["websocket"]
     depends_on:
       - stt-whisper
-    build: ./images/ws-bridge
+    image: ${COMPOSE_PROJECT_NAME}-ws-bridge:latest
     ports:
       - "11300:8000"
     environment:
@@ -175,7 +178,7 @@ services:
     profiles: ["websocket"]
     depends_on:
       - stt-openai
-    build: ./images/ws-bridge
+    image: ${COMPOSE_PROJECT_NAME}-ws-bridge:latest
     ports:
       - "11301:8000"
     environment:
@@ -190,7 +193,7 @@ services:
     profiles: ["websocket"]
     depends_on:
       - llm-ollama
-    build: ./images/ws-bridge
+    image: ${COMPOSE_PROJECT_NAME}-ws-bridge:latest
     ports:
       - "11500:8000"
     environment:
@@ -200,7 +203,7 @@ services:
     profiles: ["websocket"]
     depends_on:
       - llm-chatgpt
-    build: ./images/ws-bridge
+    image: ${COMPOSE_PROJECT_NAME}-ws-bridge:latest
     ports:
       - "11501:8000"
     environment:
@@ -210,7 +213,7 @@ services:
     profiles: ["websocket"]
     depends_on:
       - llm-gemini
-    build: ./images/ws-bridge
+    image: ${COMPOSE_PROJECT_NAME}-ws-bridge:latest
     ports:
       - "11502:8000"
     environment:
