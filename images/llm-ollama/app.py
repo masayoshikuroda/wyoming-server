@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import collections
 import logging
 import sys
 
@@ -30,6 +31,7 @@ class OllamaHandler(AsyncEventHandler):
         model: str,
         info: Info,
         system_prompt: str,
+        max_history: int = 5,
     ):
         super().__init__(reader, writer)
 
@@ -37,6 +39,8 @@ class OllamaHandler(AsyncEventHandler):
         self.model = model
         self.info = info
         self.system_prompt = system_prompt
+        self.max_history = max_history
+        self.history: collections.deque = collections.deque(maxlen=self.max_history * 2)
 
     async def handle_event(self, event: Event) -> bool:
         logger.info("Received event: %s", event)
@@ -85,18 +89,12 @@ class OllamaHandler(AsyncEventHandler):
         return True
 
     async def ask_ollama(self, text: str) -> str:
+        user_msg = {"role": "user", "content": text}
         payload = {
             "model": self.model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": self.system_prompt,
-                },
-                {
-                    "role": "user",
-                    "content": text,
-                }
-            ],
+            "messages": [{"role": "system", "content": self.system_prompt}]
+            + list(self.history)
+            + [user_msg],
             "think": False,
             "stream": False,
         }
@@ -122,6 +120,9 @@ class OllamaHandler(AsyncEventHandler):
         if not answer:
             raise RuntimeError("Ollama returned empty content")
 
+        self.history.append(user_msg)
+        self.history.append({"role": "assistant", "content": answer})
+
         return answer
 
 
@@ -132,6 +133,7 @@ async def main():
     parser.add_argument("--ollama-url", default="http://localhost:11434/api/chat")
     parser.add_argument("--model", default="gemma4:e2b")
     parser.add_argument("--system-prompt", default="You are a voice assistant. Respond briefly. Keep your response to approximately 1 to 3 sentences.")
+    parser.add_argument("--max-history", type=int, default=5)
     args = parser.parse_args()
 
     attribution = Attribution(
@@ -169,6 +171,7 @@ async def main():
             model=args.model,
             info=info,
             system_prompt=args.system_prompt,
+            max_history=args.max_history,
         )
 
     uri = f"tcp://{args.host}:{args.port}"

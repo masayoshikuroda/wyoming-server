@@ -48,6 +48,7 @@ TTS / STT / Wake Word Detection / LLM を個別に切り替えられることが
 
 - Ollama
   - `llm-ollama`
+  - 接続ごとに直近5往復のメッセージ履歴を保持
 - ChatGPT
   - `llm-chatgpt`
 - Gemini
@@ -134,5 +135,4 @@ http://localhost:11200/tts
 http://localhost:11300/stt
 http://localhost:11500/llm
 ```
-
 
